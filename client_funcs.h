@@ -31,6 +31,8 @@ int Socket(struct Client_struct* client_struct);
 
 int server_registration(struct Client_struct* client_struct, struct Server_struct* server_struct);
 
+void req_user_list(struct Client_struct* client_struct, struct Server_struct* server_struct);
+
 //===========================================================================
 
 #endif //CLIENT_H

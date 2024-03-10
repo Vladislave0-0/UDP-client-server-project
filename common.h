@@ -15,11 +15,10 @@
 #include <signal.h>
 
 
-// #define DEFAULT_SERVER_IP   "10.55.135.60"
 #define DEFAULT_SERVER_PORT 51000  
 #define DEFAULT_USERS_PORT  52000
 #define MAX_LOGIN_LENGTH    24      
-#define MAX_USERS_NUMBER    10
+#define MAX_USERS_NUMBER    8
 #define MAX_COMMAND_LENGTH  8
 
 #define LOOP_BACK
@@ -51,11 +50,8 @@ enum Status
 
 enum Request
 {
-    // DENIED   = 0,
-    // APPROVED = 1,
-
-    REGISTRATION_REQUEST = 2,
-    
+    REGISTRATION_REQUEST     = 1,
+    ONLINE_USER_LIST_REQUEST = 2,
 };
 
 enum Answer
@@ -89,7 +85,7 @@ struct Message
 struct Server_struct
 {
     struct sockaddr_in servaddr  = {0};
-    struct Client_struct* cliarr = {0};
+    // struct Client_struct* cliarr = {0};
     char ip_str[INET_ADDRSTRLEN] = {0};
 
     size_t cur_users = 0;

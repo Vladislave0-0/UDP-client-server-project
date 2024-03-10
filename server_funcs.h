@@ -21,15 +21,17 @@ int get_ip(struct Server_struct* server_struct);
 
 int Socket(struct Server_struct* server_struct);
 
-int make_fork_proc(struct Server_struct* server_struct);
+int make_fork_proc(struct Server_struct* server_struct, struct list* lst);
 
-int routing_server(struct Server_struct* server_struct);
+int routing_server(struct Server_struct* server_struct, struct list* lst);
 
 int service_server(int fork_val, Status* server_status);
 
-void add_user(struct Server_struct* server_struct, Message* message);
+void add_user(struct Server_struct* server_struct, Message* message, struct list* lst);
 
-int check_login(struct Server_struct* server_struct, const char* login);
+int check_login(struct Server_struct* server_struct, const char* login, struct list* lst);
+
+void set_online_user_list(struct Server_struct* server_struct, Message* message, struct list* lst);
 
 //===========================================================================
 

@@ -158,6 +158,19 @@ int routing_client(struct Client_struct* client_struct, struct Server_struct* se
                 user_help();
                 break;
             }
+
+            case('l'):
+            {
+                if(is_registered == 1)
+                {
+                    req_user_list(client_struct, server_struct);
+                }
+                else
+                {
+                    printf("\nConnect to the server to see the list of active users!\n");
+                }
+                break;
+            }
             
             default:
             {
@@ -176,8 +189,9 @@ void user_help()
 {
     printf("\nIT IS HELP INSTRUCTION!\n");
     printf("h - print help one more time\n");
-    printf("m - send a message\n");
     printf("r - server registration\n");
+    printf("l - list with online users\n");
+    printf("m - send a message\n");
     printf("k - kill the programm\n\n");
 }
 
@@ -237,6 +251,7 @@ int server_registration(struct Client_struct* client_struct, struct Server_struc
     strcpy(message.sender.ip_str, client_struct->ip_str);
     message.sender.port = client_struct->port;
     message.sender.cliaddr.sin_port = client_struct->cliaddr.sin_port;
+    message.sender.socketfd = client_struct->socketfd;
 
     int send_ret = sendto(client_struct->socketfd, (Message*)&message, sizeof(message), 0, (const struct sockaddr*)(&server_struct->servaddr), sizeof(server_struct->servaddr));
 
@@ -251,12 +266,13 @@ int server_registration(struct Client_struct* client_struct, struct Server_struc
 
     int recv_ret = recvfrom(client_struct->socketfd, (Message*)&message, sizeof(message), 0, &temp_struct, &sock_len);
     if (recv_ret != -1)
-    {
+    {        
         switch(message.ans)
         {
             case(APPROVED):
             {
                 printf("\nYou have been successfully registered on the server!\n");
+                // server_struct->cur_users++;
                 return SUCCESS;
             }
             case(SERVER_IS_FULL):
@@ -281,3 +297,67 @@ int server_registration(struct Client_struct* client_struct, struct Server_struc
 
     return SUCCESS;
 }
+
+//============================================================================
+
+void req_user_list(struct Client_struct* client_struct, struct Server_struct* server_struct)
+{
+    // server settings
+    strcpy(server_struct->ip_str, client_struct->ip_str);
+    server_struct->servaddr.sin_port   = htons(DEFAULT_SERVER_PORT);
+    server_struct->servaddr.sin_family = AF_INET;
+
+    #ifdef LOOP_BACK
+        server_struct->servaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    #else
+
+        inet_aton(server_struct->ip_str, &server_struct->servaddr.sin_addr);
+    #endif
+
+    // Registration message settings
+    Message message;
+    message.req = ONLINE_USER_LIST_REQUEST;
+    strcpy(message.sender.login, client_struct->login);
+    strcpy(message.sender.ip_str, client_struct->ip_str);
+    message.sender.port = client_struct->port;
+    message.sender.cliaddr.sin_port = client_struct->cliaddr.sin_port;
+    message.sender.socketfd = client_struct->socketfd;
+
+    int send_ret = sendto(client_struct->socketfd, (Message*)&message, sizeof(message), 0, (const struct sockaddr*)(&server_struct->servaddr), sizeof(server_struct->servaddr));
+
+    if(send_ret == -1)
+    {
+        printf("\nIn req_user_list: sendto error!\n");
+        return;
+    }
+
+    struct sockaddr temp_struct;
+    socklen_t sock_len = sizeof(temp_struct);
+    char buffer[MAX_USERS_NUMBER][MAX_LOGIN_LENGTH] = {0};
+
+
+    int recv_ret = recvfrom(client_struct->socketfd, (char**)buffer, sizeof(buffer), 0, &temp_struct, &sock_len);
+    if (recv_ret != -1)
+    {
+        printf("\n=====Online users=====\n");
+        for(size_t i = 0; i < buffer[i][0] != '\0' && i < MAX_USERS_NUMBER; i++)
+        {
+            if(strcmp(buffer[i], client_struct->login) == 0)
+            {
+                printf("%s (you)\n", buffer[i]);
+            }
+            else
+            {
+                printf("%s\n", buffer[i]);
+            }
+        }
+        printf("======================\n");
+    }
+    else
+    {
+        printf("\nIn req_user_list: ERROR MESSAGE\n");
+    }
+
+}
+
+//============================================================================

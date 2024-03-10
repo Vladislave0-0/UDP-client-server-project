@@ -1,4 +1,5 @@
 #include "server_funcs.h"
+#include "src/ListFunctions.h"
 
 //============================================================================
 
@@ -15,15 +16,6 @@ int ctor_server(struct Server_struct* server_struct)
     printf("Server IP: %s\n", server_struct->ip_str);
     printf("Server port: %lu\n", server_struct->port);
 
-
-    server_struct->cliarr = (struct Client_struct*)calloc(MAX_USERS_NUMBER, sizeof(struct Client_struct));
-
-    if(server_struct->cliarr == nullptr)
-    {
-        printf("ERROR CLIARR CALLOC!\n");
-        return ERROR_CLIARRAY_CALLOC;
-    }
-
     return SUCCESS;
 }
 
@@ -31,8 +23,6 @@ int ctor_server(struct Server_struct* server_struct)
 
 void dtor_server(struct Server_struct* server_struct)
 {
-    free(server_struct->cliarr);
-    server_struct->cliarr = nullptr;
     server_struct->cur_users = 0;
     strcpy(server_struct->ip_str, "");
     close(server_struct->socketfd);
@@ -113,7 +103,7 @@ int Socket(struct Server_struct* server_struct)
 
 //============================================================================
 
-int make_fork_proc(struct Server_struct* server_struct)
+int make_fork_proc(struct Server_struct* server_struct, struct list* lst)
 {
     int server_pid = getpid();
     int ret = fork();
@@ -139,7 +129,7 @@ int make_fork_proc(struct Server_struct* server_struct)
 
         else if(ppid == server_pid) // process is child
         {
-            routing_server(server_struct);
+            routing_server(server_struct, lst);
         }
     }
 
@@ -174,7 +164,7 @@ int service_server(int fork_val, Status* server_status)
 
 //============================================================================
 
-int routing_server(struct Server_struct* server_struct)
+int routing_server(struct Server_struct* server_struct, struct list* lst)
 {
     Message message;
     struct sockaddr_in cliaddr = {0};
@@ -190,7 +180,13 @@ int routing_server(struct Server_struct* server_struct)
             {
                 case(REGISTRATION_REQUEST):
                 {
-                    add_user(server_struct, &message);
+                    add_user(server_struct, &message, lst);
+                    break;
+                }
+
+                case(ONLINE_USER_LIST_REQUEST):
+                {
+                    set_online_user_list(server_struct, &message, lst);
                     break;
                 }
             
@@ -212,7 +208,7 @@ int routing_server(struct Server_struct* server_struct)
 
 //============================================================================
 
-void add_user(struct Server_struct* server_struct, Message* message)
+void add_user(struct Server_struct* server_struct, Message* message, struct list* lst)
 {
     Client_struct client_struct;
     Message new_msg;
@@ -236,44 +232,37 @@ void add_user(struct Server_struct* server_struct, Message* message)
         return;
     }
 
-    if(check_login(server_struct, message->sender.login) != SUCCESS)
+    if(check_login(server_struct, message->sender.login, lst) != SUCCESS)
     {
         new_msg.ans = LOGIN_ALREADY_USED;
         int send_ret = sendto(server_struct->socketfd, (Message*)&new_msg, sizeof(new_msg), 0, (const sockaddr*)(&client_struct.cliaddr), sizeof(client_struct.cliaddr));
         return;
     }
 
-    
-    Client_struct* new_client = &server_struct->cliarr[server_struct->cur_users];
-    new_client->port = message->sender.port;
-    strcpy(new_client->login, message->sender.login);
-    strcpy(new_client->ip_str, message->sender.ip_str);
-    new_client->socketfd = message->sender.socketfd;
-    new_client->cliaddr.sin_addr = message->sender.cliaddr.sin_addr;
-    new_client->cliaddr.sin_family = message->sender.cliaddr.sin_family;
-    new_client->cliaddr.sin_port = message->sender.cliaddr.sin_port;
     new_msg.ans = APPROVED;
     server_struct->cur_users++;
 
     printf("\n======New user entered=====\n");
-    printf("Login: %s\n", new_client->login);
-    printf("IP: %s\n", new_client->ip_str);
-    printf("Port: %lu\n", new_client->port);
-    printf("\n===========================\n");
+    printf("Login: %s\n", message->sender.login);
+    printf("IP: %s\n", message->sender.ip_str);
+    printf("Port: %lu\n", message->sender.port);
+    printf("===========================\n");
 
 
     int send_ret = sendto(server_struct->socketfd, (Message*)&new_msg, sizeof(new_msg), 0, (const sockaddr*)(&client_struct.cliaddr), sizeof(client_struct.cliaddr));
+
+    push_after(lst, lst->tail_node, message);
 }
 
 //============================================================================
 
-int check_login(struct Server_struct* server_struct, const char* login)
+int check_login(struct Server_struct* server_struct, const char* login, struct list* lst)
 {
     int login_used = 0;
 
     for(size_t i = 0; i < MAX_USERS_NUMBER; i++)
     {
-        if(strcmp(server_struct->cliarr[i].login, login) == 0)
+        if(strcmp(lst->nodes_arr[i].login, login) == 0)
         {
             login_used = 1;
             return -1;
@@ -285,3 +274,33 @@ int check_login(struct Server_struct* server_struct, const char* login)
 
 //============================================================================
 
+void set_online_user_list(struct Server_struct* server_struct, Message* message, struct list* lst)
+{
+    Client_struct client_struct;
+    Message new_msg;
+    client_struct.cliaddr.sin_port   = htons(message->sender.port);
+    client_struct.cliaddr.sin_family = AF_INET;
+
+    #ifdef LOOP_BACK
+    client_struct.cliaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    #else
+    if(inet_aton(client_struct.ip_str, &client_struct.cliaddr.sin_addr) == 0)
+    {
+        printf("ERROR CONVERTATION INTERNET HOST ADDRESS!\n");
+    }
+    #endif
+
+
+    char buffer[MAX_USERS_NUMBER][MAX_LOGIN_LENGTH] = {0};
+    list_linearize(lst);
+
+    for(size_t i = 0; i <= lst->size; i++)
+    {
+        strcpy(buffer[i], lst->nodes_arr[i].login);
+    }
+
+
+    int send_ret = sendto(server_struct->socketfd, (char**)buffer, sizeof(buffer), 0, (const sockaddr*)(&client_struct.cliaddr), sizeof(client_struct.cliaddr));
+}
+
+//============================================================================
